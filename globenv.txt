@@ -1,0 +1,504 @@
+                THE GLOBAL ENVIRONMENT PACKAGE
+                     (version of 10/16/87)
+
+The Global Environment Package extends the OS/2 system with a minor but
+useful feature.  It also serves as a demonstration of how OS/2 can be
+extended using a Dynamic Link Library.
+
+==============  Necessary Claims & Disclaimers to Affront You
+
+The stuff described here is incomplete work in progress and will probably
+cause problems of all kinds up to and including mildew.  If you use it as
+anything other than an object of scorn, you do so at your own risk.
+
+The work described is copyright 1987 by David E. Cortesi (CIS 72155,450;
+415 Cambridge Ave. #18, Palo Alto, CA 94306).  All rights reserved.
+Propogate it without retaining this notice, or sell it without asking
+permission, and I will wreak such vengeance on you as the law permits.
+
+==============  Functional Summary to Impress You
+
+The Global Environment (GEv) is a store of named variables that is
+maintained as a global resource, accessible from any program in the system.
+Each variable in the GEv has a name which is an ASCIIZ string.  A variable
+may also have a value, which is a string of bytes of any format.  A large
+number of variables may be defined.  The aggregate size of names and values
+may grow to approximately 64KB, although the initial GEv space is only
+about 2KB.
+
+The GEv is maintained by service routines that provide the following
+six functions:
+
+        - enter a name
+        - assign a new value to a name
+        - find out if a name exists and get the size of its value
+        - get a copy of a name's value
+        - delete a name (and its value if any)
+        - get the next name lexically greater than a given string
+
+Multiple processes may use these functions concurrently.  OS/2 facilities
+are used to synchronize access among processes.  Multiple processes can
+interrogate the GEv concurrently.  If a process wants to update the GEv,
+it is automatically suspended until any current processes have finished;
+then it gets exclusive access to do its work and others are suspended until
+it is done.
+
+==============  Package Contents to Dazzle You
+
+The Package consists of a Dynamic Link Library (DLL) and three supporting
+programs.
+
+The dynamically-linked ("dynalink") code that creates and maintains the GEv
+is defined in GLOBENV.ASM.  The assembled, linked object is in GLOBENV.DLL.
+The file GLOBENV.LIB defines the dynalink code to the programs that will
+call on it.
+
+The GLOBAL command gives the operator a command interface to the GEv by
+which names and values may be displayed, or names may be defined or given
+new values or deleted.
+
+The GLOBLOAD command defines GEv names and assigns values in bulk, working
+from a text file of assignment statements.  This command may be named by a
+"run=" statement in the OS/2 configuration file in order to create and
+initialize the GEv.
+
+The GLOB2SET command displays selected global variables and their values
+using the syntax of the SET command.  If its output is redirected into a
+file of type .cmd and that file executed, the result is to copy variables
+from the global environment into the local environment of a command shell.
+
+=============   ARC Contents to Confuse You
+
+The files in GLOBENV.ARC are as follows:
+
+        GLOBENV.DOC     this file
+
+        GLOBENV.ASM     dynalink code
+        GLOBENV.DEF     link definition file
+        GLOBENV.DLL     dynamic link library
+        GLOBENV.LIB     object library for linking client programs
+
+        GLOBENV.H       header file defining service functions
+
+        GLOBAL.C        global command
+        GLOBAL.EXE      compiled, linked with CodeView options
+
+        GLOBLOAD.C      globload command
+        GLOBLOAD.EXE
+
+        GLOB2SET.C      glob2set command
+        GLOB2SET.EXE
+
+==============  Installation to Snow You
+
+To make the GEv accessible, the dynalink library GLOBENV.DLL must be copied
+into the directory defined by the "libpath=" statement in the config.sys
+file.  (If there is no "libpath=" statement, it must be in the root
+directory of the boot disk.)
+
+The three .EXE files from the archive must be located in some directory on
+the normal execution path for protect-mode programs.
+
+OS/2 loads dynalink code from disk the first time it loads a program that
+uses the dynalink package, and keeps the code in storage so long as any
+program that uses it is active.  The GLOBENV.DLL code creates the GEv when
+it is first loaded and the GEv will persist as long as the code is in
+storage.
+
+Therefore, in order to initialize the GEv and keep it in storage, some
+program that uses GLOBENV.DLL must be in storage at all times.  The
+GLOBLOAD command is the preferred program.  There are three ways to make it
+active at all times.
+
+For testing purposes GLOBLOAD may be started manually:
+
+                globload -z -t
+
+The program will start and never end.  Switch to another OS/2 command line
+to do other work.  The program can be ended with control-Break, but then
+the GEv will vanish along with any variables loaded into it.
+
+Again for testing purposes GLOBLOAD may be started and detached manually:
+
+                detach globload -z -t
+
+This has the same effect as the first command, except that the program
+can't be terminated, and the command line is free for other commands.
+
+Finally, the program can be started during bootstrap by placing the
+following line in the config.sys file:
+
+                run=\globload.exe -z -t
+
+The entire program filename ("globload.exe") must be specified.
+Furthermore, the entire file path must be specified (there isn't any
+execution "path" variable defined when the config file is being processed).
+In the example the path is shown as simply \, which is correct only if
+GLOBLOAD.EXE is located in the root directory of the boot disk.
+
+Any of these three invocations may also name a file of assignment
+statements to be loaded into the GEv.  If the standard load of variables
+was defined in \GEV\STDLOAD.DAT, the config.sys line would read
+
+                run=\globload.exe -z -t \gev\stdload.dat
+
+Once GLOBLOAD has been started from the config.sys file, the Global
+Environment code will always be active.  Two results follow.
+
+First, the GLOBENV.DLL file is always open.  Attempts to delete, rename, or
+copy over it will fail with a "sharing error" message.  In order to replace
+it, you must edit the config.sys file to insert the word "rem" in front of
+the "run=" statement, and reboot.  Then the GEv will not be available and
+the DLL can be replaced.
+
+Similarly, the GLOBLOAD.EXE file named in the "run=" statement will also be
+perpetually open and can't be replaced.  Furthermore, although you can
+execute the GLOBLOAD command as normal, you will always be executing the
+in-storage copy of it.  You won't be loading it from disk even though you
+are invoking it from a command line.  This can cause great puzzlement when
+you make a small change in the program and try to test the change...
+
+==============  Recompile and Relink Methods to Tempt You
+
+If it is necessary to recreate any of these files, use the following
+commands.
+
+To recreate GLOBENV.DLL:
+
+                masm globenv;
+                link globenv,,nul,doscalls,globenv.def
+
+The file DOSCALLS.LIB must be available on the LIB= path.  Be aware that if
+the dynalink code is active, that is, if GLOBLOAD with the -z option has
+been started in the config.sys file as described above, then the copy of
+GLOBENV.DLL in the "libpath=" directory can't be erased or rewritten.
+
+To recreate GLOBENV.LIB:
+
+                implib globenv.lib globenv.def
+
+Note that the .LIB file is constructed only from the .DEF file.  There is
+no dependency on the .DLL file and no need to recreate the .LIB file when
+the .DLL is changed.
+
+To recreate any of the command files:
+
+                cl -Zi [name].c /link globenv
+
+The GLOBENV.H file must be available in the current directory or the
+directory named by the INCLUDE environment variable.  The programs are
+small-model with no special features or requirements except for needing
+GLOBENV.LIB to satisfy their external references.  The -Zi option is needed
+only to debug with CodeView.
+
+The GLOBLOAD.EXE file that was named in the config.sys file (or a DETACH
+command) cannot be replaced.  If a new version is created in a different
+library, you can't test it (no, not even if you give an explicit path)
+because OS/2 always executes the copy in storage.  You can test the new
+version by renaming it.
+
+==============  The Exported Functions to Tantalize You
+
+Here are the declarations and functional specifications of the dynalink
+entry points.  They are effectively part of the OS/2 system interface, once
+the dynalink code has been loaded.  These are what the GLOBAL, GLOBLOAD and
+GLOB2SET commands use.  Any program may use them and there are no other
+interfaces.
+
+First the return values of all functions:
+
+        0 = done as requested
+        1 = name not found
+        2 = name already exists
+        3 = no space for name a/o value
+        4 = returned value had to be truncated
+
+These will become clearer below.
+
+        extern int far pascal GLBENTER(char far * thename);
+
+The null-terminated character string is entered as a name to the GEv.
+There is no restriction as to length or contents of the name.  Names ought
+to be printable and keyboardable but there's no check on that.  Returns
+either 0, 2 or 3.
+
+        extern int far pascal GLBDELETE(char far * thename);
+
+The null-terminated string is looked up as a name; if found, it and any
+value it might have are deleted from the GEv.  There's no concept of
+ownership; any process may enter a name and any process may delete it.
+Returns either 0 or 1.
+
+        extern int far pascal GLBQUERY(char far * thename
+                                      ,unsigned far * thesize);
+
+The null-terminated string is looked up; if found, the size of its value
+(which may range from zero to something less than 65K) is set in the second
+parameter.  Returns either 0 or 1.
+
+        extern int far pascal GLBSTORE(char far * thename
+                                      ,void far * thevalue
+                                      ,unsigned thelen);
+
+The null-terminated string given as the first parameter is looked up.  If
+it exists as a name its present value (if any) is discarded and the value
+given in the second parameter is copied to the GEv and assigned to the
+name.  The new value is NOT null-delimited; its length is given by the
+third parameter.  The GLOBAL and other commands assume that values are
+printable but that doesn't have to be the case.  Returns either 0, 1 or 3.
+
+        extern int far pascal GLBFETCH( char far * thename
+                                      , void far * valbuff
+                                      , unsigned far * thesize);
+
+The first parameter specifies a null-terminated string supposed to be a
+name.  The third parameter specifies a maximum value-size that can be
+placed in the buffer specified by the second parameter.  The name is looked
+up; if it exists in the GEv, its present value is copied to the second
+parameter for a size not exceeding the count in the third parameter.  The
+number of bytes copied is returned in the third parameter.  Returns either
+0, 1 or 4.
+
+        extern int far pascal GLBNEXT ( char far * thename
+                                      , int strmax
+                                      , char far * strbuff
+                                      , int far * thesize);
+
+This function is used to step through the names in lexical order.  The
+first parameter specifies a null-terminated name or name-prefix.  The third parameter specifies a
+buffer to receive the next higher name in sequence, and the second
+parameter gives the maximum size of that string buffer.  The fourth
+parameter receives the value size of the returned name, as for GLBQUERY.
+
+The NEXT function finds the existing name next higher in ASCII collating
+sequence than the first-parameter string (just a null will do for finding
+the lowest name).  That name string is returned in the third parameter and
+the size of its value is returned in the fourth.  The first and third
+parameters may be identical.
+
+Returns either 0, 1 (no higher name exists) or 3 (next name won't fit in
+the size specified by the second parameter).
+
+==============  Tracing Under CodeView -- Do You Dare?
+
+The workings of the dynalink code can be inspected by tracing any of the
+three command files under CodeView.  So long as the dynalink code has been
+activated separately (using GLOBLOAD with the -z option), you can trace
+right into it with CodeView, and can examine or patch the GEv space.
+
+Note that CodeView as distributed with the OS/2 SDK cannot trace a program
+that calls upon a DLL that is NOT in storage at the time CodeView starts
+up.  If the GLOBENV.DLL code is not active when you begin CodeView on one
+of the commands, the initial program registers and descriptors will be
+garbage and an attempt to trace will cause an instant segmentation error,
+with CodeView (bless its little pointed head) saying the program terminated
+normally.  But if the DLL code is already active, CodeView can handle it
+fine.
+
+However you must remain aware of the nature of code and data that can be
+shared from many programs.
+
+When any process enters the dynalink code one of two counters, RdrCount or
+WtrCount, is incremented depending on the nature of the function called.
+The same counter is decremented on exit.  If it is not decremented -- that
+is, if you trace into a dynalink routine and then Quit CodeView or reset
+the IP so that the dynalink exit code isn't executed -- then a booby trap
+is set for the next program to call the dynalink code.  Depending on what
+function went unfinished, either all functions or only "writer" functions
+will enter an endless wait.  They're waiting for that counter to decrement,
+and it won't.
+
+There are two ways to avoid this problem: (1) If you trace INTO a GEv
+function, be sure to trace all the way OUT again, to where it returns to
+its caller.  (2) Don't Q)uit out of CodeView until you have seen the
+message "Program terminated normally."  This means that the program has
+been terminated by OS/2, which means that the GEv Exit Routine will have
+run and (probably) cleaned up the abandoned semaphores.
+
+Strangely enough, if you set a breakpoint in the dynalink code, the
+breakpoint cannot be tripped except by the program being debugged.
+Commands running running asynchronously in other screen groups run right
+through it with no trouble.
+
+=============== Reading the Code, or, You Are In a Sunlit Meadow and
+                In Front of You is a Small Building...
+
+The GLOBENV.ASM file is rather large, but a lot of its bulk is comments.
+The actual code is pretty straightforward, once you understand its
+objectives.  Furthermore it breaks up into separate chunks that perhaps
+should be separate source modules.  They can be read as separate modules,
+at any rate.
+
+The following discussion is by chunks in the order the chunks appear in the
+file.  Use a search on the string "subttl" to locate them, as each chunk
+starts with
+
+        subttl sub-title
+        page
+
+followed by a boxed comment.  Read this summary first for orientation.
+
+** subttl Global Data Area
+
+There are two segments, one code and one data.  Both are loaded from disk
+when a client program is first loaded.  They are assigned entries in the
+Local Descriptor Table of that client, and will have exactly those same
+selector numbers in all client programs.  (Can you see why this has to be?)
+
+Only a single copy of the data segment is created no matter how many
+clients are active.  Its selector appears in every client's address space,
+and any number of processes can have concurrent, write access to it.
+Obviously updates to it have to be synchronized.  The first thing in the
+segment is three semaphores and two counters used for this purpose.
+
+Most of the segment is a pool of space for names, values, and for two
+arrays of pointers to them.  This space is managed dynamically.  As loaded
+there's 2K of it, but the segment can be enlarged after loading using
+DosReallocSeg.
+
+** subttl Entry and Setup Formalities
+
+The first time a DLL is loaded, OS/2 looks to see if a program entry point
+was defined when it was linked.  If so, that entry is called.  (Users of
+Modula-2 and of IBM Pascal "Units" will find this concept quite familiar.)
+The code of this entry point is in this section.
+
+** subttl Exit List Items
+
+This version of the package contains a major enhancement in reliability:
+it sets up an OS/2 Exit Routine for every client process.  When a process
+that has called on a GEv function terminates for any reason, the exit proc
+defined here gets control (even under CodeView -- you can set a break at
+the top of ExitRoutine and see).  If when termination began the client
+process was in a reader or writer function, the code here tries to clean up
+so that other processes can keep running.  Works really slick, too.
+
+** subttl Procedures for Mutual Exclusion
+
+The purpose of these routines is discussed in the boxed comment, and
+pseudo-code is given there.  Here's a summary of the OS/2 facilities used.
+A semaphore is just a doubleword in storage.  If it's zero, it's CLEAR and
+can be CLAIMED by any thread.  If it's nonzero it can't be claimed but it
+can be WAITED on; that is, the thread may suspend itself until such time as
+the semaphore becomes clear.
+
+DosSemSet forces a semaphore to a nonzero state.  DosSemClear clears one
+and incidentally releases any threads that were waiting on it.  DosSemWait
+doesn't return until the specified semaphore is clear, which may be right
+away or a long time from now.  It also takes a time limit, but in this code
+that's given as -1, meaning forever.
+
+DosSemRequest takes a semaphore and waits until it is clear, and then
+claims it.  It doesn't return until the semaphore has been claimed, which
+may be right away if it's clear, or a long time from now.
+
+The RdrGate semaphore is used to block readers from coming in while a
+writer is busy.  They wait on it; writers set or clear it.  The WtrWait
+semaphore is used to block writers while readers are working.  Writers set
+it and wait on it; the last reader to leave clears it.  This covers most
+cases but there are holes; that's why there's a while-loop in the writer
+logic.
+
+** subttl Heap Space Management
+
+The middle of the data segment is kept as a pool of "objects." A
+name-string is an object, and a value string is an object.  Since values
+can be replaced and names can be deleted, objects can be discarded; then
+they become "garbage" and can be "collected" for reuse if that's desirable.
+
+At the top (highest addresses) of the segment there's an array of words
+that contain offsets of objects.  A given object is addressed by only one
+word, no more.  The only legitimate way to address an object is to find the
+word that anchors it, and to pick up its offset from there.  It is ILLEGAL
+to let the offset of an object be known outside this code, or to retain one
+beyond the time of a single call.  The reason is that objects can be moved
+around during any update.  The offset in the anchor word will be updated
+when the object is moved, but offsets stored elsewhere will no longer be
+correct.
+
+An object is at least 3 words long.  The first word is its total length in
+bytes.  The second is the index of its anchor, so the object points to the
+word that points to the object.  If this word is zero, the object has no
+anchor and is garbage.  The third and following words are the contents of
+the object.
+
+The first routine in this section is GColl, the garbage collector.  Its
+pseudo-code is given; it just sweeps over all objects and compacts the ones
+that are in use down over the garbage ones (if any).
+
+The second routine is Xtend; it makes more space in the segment by
+extending it with DosReallocSeg.  It also has to move the array of words at
+the end of the segment out, to the new end of segment.
+
+The third routine, GetSpace, finds where to put an object of a given size.
+It has several strategies, mainly aimed at avoiding too-frequent calls on
+GColl and Xtend.  GetSpace is only called from MakeObj.
+
+FreeObj follows, to make garbage of an object.  Then comes MakeObj to make
+one using GetSpace.
+
+** subttl Descriptor Array Management
+
+There's a long discussion in the boxed comment.  To summarize: the GEv
+contains an unknown number of variables.  For each variable we have to
+record (1) the anchor of its name-object; (2) the anchor of its
+value-object; (3) the length of its value-object (the length word in the
+object itself is rounded up to a word multiple).  So we need a three-column
+table, one row per variable.  One row describes one variable and is called
+a descriptor in the comments.
+
+Rather than code in a maximum number of variables, I chose to make the
+table variable in size.  Each time a new name is defined, the table has to
+be extended.  In order to have this extensible table and also an extensible
+pool of objects, I put the array at the top of the segment and let it grow
+downward like a stalactite.  Therefore the words in it are addressed
+BACKWARD, that is, by SUBTRACTING an offset from SegLimit, the size of the
+segment.  This addressing is independent of the segment size, so it doesn't
+change when Xtend is called.
+
+In the comments these backward offsets are called "backoffs."  The control
+word in an object is the backoff of the word that contains the object's
+offset.  Cute, huh?
+
+There's a fourth column associated with the table.  The names are kept
+sorted in ascii order.  Rather than moving the descriptors around to keep
+them in sequence (which would have entailed changing the control words in
+the objects, too, every time the descriptors moved), I set up a fourth list
+which contains the backoffs of the (first words of the) descriptors in
+sorted order.  It's easy (tho not fast) to insert a new name into this
+list with a dumb insertion sort.
+
+The GetDesc routine finds a free descriptor.  If there's an empty one (from
+a deletion) it uses that; otherwise it has to grow the array downward.  If
+there isn't room on top of the pool of objects, it has to make room by
+calling either GColl or Xtend.
+
+** subttl String Operations
+
+Hand-coded versions of strlen, strcpy, strcmp.  These use string
+instructions but preserve registers.
+
+** subttl Name-Search Routines
+
+Routines to search the ordered list of names, discussed in their boxed
+comments.  Of interest only for the use of backoffs in addressing.
+
+** subttl the --- function
+
+The last 6 sections are the actual functions exported to client routines.
+These call upon the inner routines listed above to interrogate or modify
+the common segment.
+
+Notice how each routine relies on its caller's stack segment, but not on
+its caller's data segment.  Register DS is saved and then loaded with the
+segment of the common segment.  On exit, register DS is restored.  It is
+this little bit of logic that is missing in C and Pascal library routines
+and causes the so-called "DS=SS" problems.
+
+** subttl Workspace Integrity Check
+
+If the Exit Routine is entered for a process that died while updating the
+GEv, this routine is called to validate the GEv and, if it has been
+corrupted, to clear it to an empty but usable state.
+
+
